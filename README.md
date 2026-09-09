@@ -1,5 +1,7 @@
 # holdfast
 
+[![firmware](https://github.com/Ruslan0010/holdfast/actions/workflows/ci.yml/badge.svg)](https://github.com/Ruslan0010/holdfast/actions/workflows/ci.yml)
+
 Telemetry for seismic field stations on networks that do not cooperate.
 
 A remote seismic recorder has to ship a continuous sample stream to a central
@@ -25,13 +27,14 @@ in.
 ## Quickstart
 
 ```bash
-git clone <your-repo-url>
+git clone https://github.com/Ruslan0010/holdfast.git
 cd holdfast
 make test
 ```
 
-You will see twelve failures. That is correct: `firmware/src/ringbuf.c` is a
-set of stubs. Your job is to make them pass.
+Thirteen tests run and twelve fail. That is correct: `firmware/src/ringbuf.c`
+is a set of stubs (the one that passes only checks that garbage is rejected,
+which stubs do by accident). Your job is to make them all pass.
 
 ```bash
 make test        # build and run
@@ -69,9 +72,10 @@ docs/               protocol spec and roadmap
 
 ## Roadmap
 
-See `docs/ROADMAP.md`. Eight milestones, from tonight's ring buffer to twenty
+See `docs/ROADMAP.md`. Eleven milestones, from tonight's ring buffer to twenty
 simulated stations reporting to a live dashboard, with the firmware running on
-a simulated STM32 in CI.
+a simulated STM32 in CI. Nothing before the last milestone needs a board on
+your desk.
 
 ## Licence
 
