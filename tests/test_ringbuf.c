@@ -1,8 +1,8 @@
 /*
- * test_ringbuf.c — the specification, written as executable tests.
+ * test_ringbuf.c — the ring buffer specification, written as executable tests.
  *
- * Read these before you write a line of ringbuf.c. Every test here describes
- * a real situation a field station hits. The comments say which one.
+ * Every test here describes a real situation a field station hits. The
+ * comments say which one.
  */
 
 #include "test.h"
@@ -263,6 +263,41 @@ static void test_get_is_repeatable(void)
     CHECK_EQ(rb_count(&rb), 1);
 }
 
+/* The station stamps each packet with rb_next_seq() before pushing it, so the
+ * peek must agree with what rb_push() then assigns. */
+static void test_next_seq_peek_matches_push(void)
+{
+    setup();
+    rb_init(&rb, storage, lengths, SLOT_SIZE, SLOT_COUNT);
+
+    uint8_t rec[4];
+    uint64_t seq;
+    for (int i = 0; i < SLOT_COUNT * 2; i++) {
+        const uint64_t peek = rb_next_seq(&rb);
+        make_record(rec, sizeof rec, (uint8_t)i);
+        CHECK_EQ(rb_push(&rb, rec, sizeof rec, &seq), RB_OK);
+        CHECK_EQ(seq, peek);
+    }
+    CHECK_EQ(rb_oldest_seq(&rb), SLOT_COUNT);
+    CHECK_EQ(rb_next_seq(NULL), 0);
+    CHECK_EQ(rb_oldest_seq(NULL), 0);
+}
+
+/* An uninitialised buffer must fail cleanly, not dereference garbage. */
+static void test_uninitialised_buffer_rejected(void)
+{
+    setup();
+    uint8_t out[SLOT_SIZE];
+    uint64_t seq;
+    uint16_t out_len = 0;
+    CHECK_EQ(rb_push(&rb, out, 1, &seq), RB_ERR_ARG);
+    CHECK_EQ(rb_get(&rb, 0, out, sizeof out, &out_len), RB_ERR_ARG);
+    CHECK_EQ(rb_count(&rb), 0);
+    CHECK_EQ(rb_is_full(&rb), 0);
+    CHECK_EQ(rb_push(NULL, out, 1, &seq), RB_ERR_ARG);
+    CHECK_EQ(rb_get(NULL, 0, out, sizeof out, &out_len), RB_ERR_ARG);
+}
+
 /* Zero-length record. Legal (a keepalive marker) and must round-trip. */
 static void test_zero_length_record(void)
 {
@@ -295,6 +330,8 @@ int main(void)
     RUN(test_small_output_buffer_rejected);
     RUN(test_wraparound_three_laps);
     RUN(test_get_is_repeatable);
+    RUN(test_next_seq_peek_matches_push);
+    RUN(test_uninitialised_buffer_rejected);
     RUN(test_zero_length_record);
     return TEST_REPORT();
 }
