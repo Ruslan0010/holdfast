@@ -1,11 +1,12 @@
-name: firmware
+name: ci
 
 on:
   push:
   pull_request:
 
 jobs:
-  test:
+  firmware:
+    name: firmware (${{ matrix.cc }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -13,26 +14,45 @@ jobs:
         cc: [gcc, clang]
     steps:
       - uses: actions/checkout@v4
-
-      - name: Build and run unit tests
+      - name: Unit tests
         run: make test CC=${{ matrix.cc }}
-
-      - name: Run under AddressSanitizer and UBSan
+      - name: Unit tests under AddressSanitizer and UBSan
         run: make test-asan CC=${{ matrix.cc }}
+      - name: Host station binary
+        run: make station CC=${{ matrix.cc }}
+      - name: Replay fuzz corpus under sanitizers
+        run: make fuzz-corpus CC=${{ matrix.cc }}
+
+  fuzz:
+    name: libFuzzer
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fuzz the packet and Steim2 decoders
+        run: make fuzz FUZZ_TIME=60
 
   static-analysis:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - name: Install cppcheck
         run: sudo apt-get update && sudo apt-get install -y cppcheck
-
       - name: cppcheck
-        run: |
-          cppcheck --enable=warning,style,performance,portability \
-                   --error-exitcode=1 \
-                   --inline-suppr \
-                   --std=c11 \
-                   -I firmware/include \
-                   firmware/src
+        run: make lint
+
+  server:
+    name: server and integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Python unit tests and cross-implementation vectors
+        run: make pytest
+      - name: End to end through every link profile
+        run: make integration
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-results
+          path: build/integration_results.json
