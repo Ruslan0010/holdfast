@@ -153,6 +153,23 @@ static void test_encoder_argument_checks(void)
     CHECK_EQ(consumed, 0);
 }
 
+/* Regression, found by the fuzzer: encoding zero samples produces zero
+ * bytes, so decoding zero bytes with zero expected samples must succeed.
+ * It used to return STEIM2_ERR_FORMAT, which made encode and decode
+ * disagree at the empty case. */
+static void test_empty_round_trip_is_symmetric(void)
+{
+    size_t out_len = 99, consumed = 99, n_out = 99;
+    CHECK_EQ(steim2_encode(src, 0, frames, sizeof frames, &out_len, &consumed), STEIM2_OK);
+    CHECK_EQ(out_len, 0);
+    CHECK_EQ(consumed, 0);
+    CHECK_EQ(steim2_decode(frames, out_len, consumed, dst, MAX_N, &n_out), STEIM2_OK);
+    CHECK_EQ(n_out, 0);
+
+    /* But asking for samples when there are no frames is still an error. */
+    CHECK_EQ(steim2_decode(frames, 0, 1, dst, MAX_N, &n_out), STEIM2_ERR_SHORT);
+}
+
 static void test_decoder_detects_corruption(void)
 {
     for (size_t i = 0; i < 50; i++)
@@ -207,6 +224,7 @@ int main(void)
     RUN(test_compression_ratio_on_smooth_signal);
     RUN(test_out_of_range_difference_rejected);
     RUN(test_encoder_argument_checks);
+    RUN(test_empty_round_trip_is_symmetric);
     RUN(test_decoder_detects_corruption);
     RUN(test_decoder_overflow_is_an_error);
     return TEST_REPORT();

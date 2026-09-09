@@ -16,7 +16,13 @@ First working system, host only.
   recovery, status file, export with byte-for-byte verification.
 - Network simulator with loss, delay, jitter, duplication, blackouts and
   NAT-like addressing; five named link profiles.
-- Tests: 71 C unit tests under gcc, clang, ASan and UBSan; 30 Python unit
+- Tests: 66 C unit tests under gcc, clang, ASan and UBSan; 31 Python unit
   tests; cross-implementation vectors; libFuzzer harnesses with a replayable
   corpus; eight end-to-end scenarios through the simulator.
-- Documentation: protocol specification, design, six decision records.
+- Fixed: `steim2_decode` rejected the zero-length input that
+  `steim2_encode` produces for an empty run, so the two disagreed at the
+  empty case. Found by libFuzzer on the first CI run; the crash input is
+  committed as a regression seed. The Python implementation had the same
+  bug and the same fix.
+- Documentation: protocol specification, design, six decision records, and
+  a README write-up of the fuzzer finding.

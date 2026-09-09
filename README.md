@@ -147,13 +147,43 @@ PYTHONPATH=server python3 -m holdfast.export --db demo.db --station 1 --verify s
 
 | level         | what                                         | how                                                       |
 |---------------|----------------------------------------------|-----------------------------------------------------------|
-| unit, C       | ring buffer, CRC-32, packets, Steim2, limiter | 71 tests, 40-line harness, gcc and clang, ASan and UBSan  |
-| unit, C, core | the station state machine                     | recording mock HAL; every datagram decoded and checked     |
+| unit, C       | ring buffer, CRC-32, packets, Steim2, limiter | 50 tests, 40-line harness, gcc and clang, ASan and UBSan  |
+| unit, C, core | the station state machine                     | 16 tests against a recording mock HAL; every datagram decoded and checked |
 | fuzz          | packet and Steim2 decoders                    | libFuzzer with round-trip properties; corpus replayed under ASan on every build |
 | cross-impl    | C encoders vs Python decoders                 | `make vectors`: C emits, Python must decode and re-encode identically |
-| unit, Python  | protocol, Steim2, gap tracker, store          | 30 tests, `unittest`, no dependencies                      |
-| integration   | station → netsim → server → SQLite → export   | 8 scenarios, byte-for-byte against the source              |
+| unit, Python  | protocol, Steim2, gap tracker, store          | 31 tests, `unittest`, no dependencies                      |
+| integration   | station → netsim → server → SQLite → export   | 8 scenarios, byte-for-byte against the source signal       |
 | static        | `-Wall -Wextra -Wconversion -Wshadow … -Werror`, cppcheck | every build                                     |
+
+## A bug the fuzzer found
+
+The first time CI ran the libFuzzer job, it crashed the Steim2 harness in 40
+seconds on an input beginning with a zero byte.
+
+The harness asserts that the codec round-trips: whatever `steim2_decode`
+accepts must re-encode and decode back to the same samples. A leading zero
+byte asked it to decode **zero** samples. That succeeded and produced an
+empty run; `steim2_encode` of an empty run correctly produced zero bytes;
+and then `steim2_decode` rejected those zero bytes with `STEIM2_ERR_FORMAT`,
+because its very first length check was `in_len == 0 || in_len % 64 != 0`.
+
+So the encoder and the decoder disagreed at the empty case: one produced
+output the other refused to read. Not a memory-safety bug and not reachable
+from the wire today, since the packet layer requires `payload_len` and
+`sample_count` to be zero or non-zero together. But it was a real hole in
+the codec's contract, and the kind that surfaces later as an unexplained
+dropped keepalive packet.
+
+The fix reorders the check so zero expected samples returns success before
+the length test, and a zero-length input is only an error when samples were
+actually expected ([`firmware/src/steim2.c`](firmware/src/steim2.c)). The
+Python implementation had the identical bug and got the identical fix, which
+is itself worth noting: the two were written independently from the same
+specification and still made the same mistake, so cross-checking two
+implementations does not remove the need to fuzz them. The crash input is
+committed as a regression seed at
+`tests/fuzz/corpus/fuzz_steim2/regression-empty-round-trip`, and both
+codecs gained a test for the empty round trip.
 
 ## Layout
 

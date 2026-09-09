@@ -53,6 +53,15 @@ class TestSteim2(unittest.TestCase):
         with self.assertRaises(steim2.Steim2Error):
             steim2.encode([0, 1 << 29], 1)
 
+    def test_empty_round_trip_is_symmetric(self):
+        """Regression, found by the C fuzzer: encoding zero samples yields
+        zero bytes, so decoding zero bytes must yield zero samples."""
+        frames, n = steim2.encode([], 3)
+        self.assertEqual((frames, n), (b"", 0))
+        self.assertEqual(steim2.decode(frames, n), [])
+        with self.assertRaises(steim2.Steim2Error):
+            steim2.decode(b"", 1)
+
     def test_corruption(self):
         x = [i * i for i in range(50)]
         frames, n = steim2.encode(x, 3)

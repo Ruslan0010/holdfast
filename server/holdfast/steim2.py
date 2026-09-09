@@ -96,10 +96,14 @@ def _layout(nibble: int, word: int) -> tuple[int, int]:
 
 
 def decode(frames: bytes, n_expected: int) -> list[int]:
-    if len(frames) == 0 or len(frames) % FRAME_LEN != 0:
+    if len(frames) % FRAME_LEN != 0:
         raise Steim2Error("format")
+    # Zero samples occupy zero frames: decode() must invert encode() at the
+    # empty case too. Mirrors firmware/src/steim2.c.
     if n_expected == 0:
         return []
+    if not frames:
+        raise Steim2Error("short")
 
     x0, xn = struct.unpack_from(">ii", frames, 4)
     out: list[int] = []

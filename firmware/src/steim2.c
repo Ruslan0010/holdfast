@@ -157,14 +157,21 @@ int steim2_decode(const uint8_t *in, size_t in_len, size_t n_expected,
 {
     if (in == NULL || out == NULL || n_out == NULL)
         return STEIM2_ERR_ARG;
-    if (in_len == 0 || in_len % STEIM2_FRAME_LEN != 0)
+    if (in_len % STEIM2_FRAME_LEN != 0)
         return STEIM2_ERR_FORMAT;
     if (n_expected > out_cap)
         return STEIM2_ERR_SIZE;
 
     *n_out = 0;
+
+    /* Zero samples occupy zero frames. steim2_encode() of an empty run
+     * produces no output, so decoding no input must succeed with no output
+     * or the two functions are not inverses of each other. Found by
+     * tests/fuzz/fuzz_steim2.c; see the note in README.md. */
     if (n_expected == 0)
         return STEIM2_OK;
+    if (in_len == 0)
+        return STEIM2_ERR_SHORT;
 
     const int32_t x0 = (int32_t)rd_u32(in + 4);
     const int32_t xn = (int32_t)rd_u32(in + 8);

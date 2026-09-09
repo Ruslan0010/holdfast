@@ -30,6 +30,16 @@ jobs:
       - uses: actions/checkout@v4
       - name: Fuzz the packet and Steim2 decoders
         run: make fuzz FUZZ_TIME=60
+      - name: Upload any crash inputs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-crashes
+          path: |
+            crash-*
+            timeout-*
+            oom-*
+          if-no-files-found: ignore
 
   static-analysis:
     runs-on: ubuntu-latest
