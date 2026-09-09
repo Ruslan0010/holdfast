@@ -63,7 +63,7 @@ test-asan: $(ASAN_BINS)
 station: $(BUILD)/station
 
 $(BUILD)/station: $(CORE_SRC) $(STATION_SRC) | $(BUILD)
-	$(CC) $(CFLAGS) -D_POSIX_C_SOURCE=200809L -Ifirmware/hal \
+	$(CC) $(CFLAGS) -D_POSIX_C_SOURCE=200809L \
 	      $(CORE_SRC) $(STATION_SRC) -o $@
 
 # libFuzzer: clang only. Runs each harness for a bounded time against the
