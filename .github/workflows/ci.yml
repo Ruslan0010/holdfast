@@ -1,0 +1,38 @@
+name: firmware
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        cc: [gcc, clang]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build and run unit tests
+        run: make test CC=${{ matrix.cc }}
+
+      - name: Run under AddressSanitizer and UBSan
+        run: make test-asan CC=${{ matrix.cc }}
+
+  static-analysis:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install cppcheck
+        run: sudo apt-get update && sudo apt-get install -y cppcheck
+
+      - name: cppcheck
+        run: |
+          cppcheck --enable=warning,style,performance,portability \
+                   --error-exitcode=1 \
+                   --inline-suppr \
+                   --std=c11 \
+                   -I firmware/include \
+                   firmware/src
