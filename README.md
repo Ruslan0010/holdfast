@@ -54,9 +54,10 @@ the source signal. Measured 2026-09-09 on a laptop, 240 s of a synthetic
 | clean-raw | 0% loss, 1±0 ms | raw | 100.0 % ✔ byte-for-byte | 445 | 0 | 0 | 4.76 | no compression, for comparison |
 | starlink | 2% loss, 40±20 ms, 30 s blackout / 600 s | steim2 | 100.0 % ✔ byte-for-byte | 174 | 1 | 1 | 1.71 |  |
 | 4g-mountain | 15% loss, 300±100 ms, 60 s blackout / 300 s | steim2 | 100.0 % ✔ byte-for-byte | 174 | 49 | 54 | 2.18 |  |
-| dying-modem | 30% loss, 500±300 ms, 60 s blackout / 300 s | steim2 | 100.0 % ✔ byte-for-byte | 174 | 122 | 124 | 2.91 |  |
-| dying-modem-ratelimit | 30% loss, 500±300 ms, 60 s blackout / 300 s | steim2 | 100.0 % ✔ byte-for-byte | 174 | 162 | 156 | 3.16 | link capped at 6 kB/s, below the live rate |
+| dying-modem | 30% loss, 500±300 ms, 60 s blackout / 300 s | steim2 | 100.0 % ✔ byte-for-byte | 174 | 121 | 124 | 2.90 |  |
+| dying-modem-ratelimit | 30% loss, 500±300 ms, 60 s blackout / 300 s | steim2 | 100.0 % ✔ byte-for-byte | 174 | 147 | 147 | 3.00 | link capped at 6 kB/s, below the live rate |
 | dying-modem-tiny-ring | 30% loss, 500±300 ms, 60 s blackout / 300 s | steim2 | 78.4 % | 94 | 10 | 44 | 2.09 | retention of 8 packets: loss is expected and reported |
+| restart | 0% loss, 1±0 ms | steim2 | 100.0 % ✔ byte-for-byte | 95 | 0 | 0 | 1.85 | station killed and restarted mid-stream with a persisted counter |
 
 - Every profile that keeps at least one copy of the data recovers **100 %,
   byte for byte**, including 30 % loss with three blackouts.
