@@ -6,3 +6,9 @@ compile_commands.json
 __pycache__/
 *.pyc
 .venv/
+*.db
+*.db-wal
+*.db-shm
+*.i32
+status.json
+*.tmp
