@@ -48,6 +48,9 @@ typedef struct {
     uint32_t heartbeat_interval_ms;
     uint32_t rate_limit_bps;       /* bytes per second, 0 = unlimited */
     uint32_t rate_burst_bytes;     /* >= PKT_MAX_LEN */
+    uint64_t start_seq;            /* first sequence number; 0 on first boot,
+                                      persisted value plus a margin after a
+                                      reboot (see rb_resume) */
 } station_cfg_t;
 
 typedef struct {

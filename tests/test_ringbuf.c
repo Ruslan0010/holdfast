@@ -298,6 +298,32 @@ static void test_uninitialised_buffer_rejected(void)
     CHECK_EQ(rb_get(NULL, 0, out, sizeof out, &out_len), RB_ERR_ARG);
 }
 
+/* After a reboot the station continues from a persisted counter. Records
+ * below the resume point are reported as evicted, never as future. */
+static void test_resume_continues_numbering(void)
+{
+    setup();
+    rb_init(&rb, storage, lengths, SLOT_SIZE, SLOT_COUNT);
+    CHECK_EQ(rb_resume(&rb, 1000), RB_OK);
+    CHECK_EQ(rb_count(&rb), 0);
+    CHECK_EQ(rb_next_seq(&rb), 1000);
+    CHECK_EQ(rb_oldest_seq(&rb), 1000);
+
+    uint8_t rec[4], out[SLOT_SIZE];
+    uint64_t seq;
+    uint16_t out_len = 0;
+    make_record(rec, sizeof rec, 1);
+    CHECK_EQ(rb_push(&rb, rec, sizeof rec, &seq), RB_OK);
+    CHECK_EQ(seq, 1000);
+    CHECK_EQ(rb_get(&rb, 999, out, sizeof out, &out_len), RB_ERR_EVICTED);
+    CHECK_EQ(rb_get(&rb, 1000, out, sizeof out, &out_len), RB_OK);
+    CHECK_EQ(rb_get(&rb, 1001, out, sizeof out, &out_len), RB_ERR_FUTURE);
+
+    /* Not allowed once the buffer holds anything. */
+    CHECK_EQ(rb_resume(&rb, 5000), RB_ERR_ARG);
+    CHECK_EQ(rb_resume(NULL, 5000), RB_ERR_ARG);
+}
+
 /* Zero-length record. Legal (a keepalive marker) and must round-trip. */
 static void test_zero_length_record(void)
 {
@@ -332,6 +358,7 @@ int main(void)
     RUN(test_get_is_repeatable);
     RUN(test_next_seq_peek_matches_push);
     RUN(test_uninitialised_buffer_rejected);
+    RUN(test_resume_continues_numbering);
     RUN(test_zero_length_record);
     return TEST_REPORT();
 }

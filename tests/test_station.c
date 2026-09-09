@@ -422,6 +422,39 @@ static void test_send_failure_is_counted_not_fatal(void)
     CHECK_EQ(rb_count(&st.rb), 1);
 }
 
+/* After a reboot the first packet carries the resumed sequence number and
+ * the first heartbeat advertises an empty window starting there. */
+static void test_start_seq_after_reboot(void)
+{
+    station_cfg_t c = base_cfg();
+    c.start_seq = 5000;
+    setup(&c, SLOTS);
+    station_tick(&st, 0);
+    pkt_t p;
+    CHECK_EQ(decode_sent(0, &p), PKT_OK);
+    CHECK_EQ(p.type, PKT_HEARTBEAT);
+    CHECK(p.u.heartbeat.next_seq == 5000);
+    CHECK(p.u.heartbeat.oldest_seq == 5000);
+
+    station_feed(&st, sig, 50, T0, 0);
+    DECODE_DATA(1, p);
+    CHECK(p.u.data.seq == 5000);
+
+    /* A request for the pre-reboot range is evicted, not future. */
+    pkt_gaps_t g;
+    memset(&g, 0, sizeof g);
+    g.station_id = 0x1234;
+    g.count      = 1;
+    g.ranges[0].from = 4990; g.ranges[0].to = 4999;
+    uint8_t buf[PKT_MAX_LEN];
+    size_t  len = 0;
+    pkt_encode_gaps(&g, buf, sizeof buf, &len);
+    station_on_rx(&st, buf, len, 0);
+    station_tick(&st, 1 * MS);
+    CHECK_EQ(st.stats.gap_seqs_evicted, 10);
+    CHECK_EQ(st.stats.retransmits, 0);
+}
+
 /* The pending buffer accepts what fits and reports the rest. */
 static void test_feed_reports_partial_acceptance(void)
 {
@@ -451,6 +484,7 @@ int main(void)
     RUN(test_backfill_work_per_tick_is_bounded);
     RUN(test_bad_and_foreign_datagrams_are_ignored);
     RUN(test_send_failure_is_counted_not_fatal);
+    RUN(test_start_seq_after_reboot);
     RUN(test_feed_reports_partial_acceptance);
     return TEST_REPORT();
 }

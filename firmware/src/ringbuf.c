@@ -135,3 +135,12 @@ uint64_t rb_oldest_seq(const rb_t *rb)
 {
     return rb_valid(rb) ? rb->oldest_seq : 0;
 }
+
+int rb_resume(rb_t *rb, uint64_t start_seq)
+{
+    if (!rb_valid(rb) || rb->next_seq != rb->oldest_seq)
+        return RB_ERR_ARG;
+    rb->next_seq   = start_seq;
+    rb->oldest_seq = start_seq;
+    return RB_OK;
+}

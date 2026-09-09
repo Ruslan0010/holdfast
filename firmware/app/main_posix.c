@@ -21,8 +21,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #define MAX_SLOTS 4096 /* 1 MiB of retention at 256 bytes a slot */
+
+/* Packets that may have been built between the last save of the sequence
+ * counter and a crash. The resumed counter skips this many so no number is
+ * ever reused; the skipped range is reported to the server as evicted. */
+#define SEQ_RESUME_MARGIN 64
 
 static uint8_t   slot_storage[MAX_SLOTS * PKT_MAX_LEN];
 static uint16_t  slot_lengths[MAX_SLOTS];
@@ -48,6 +54,8 @@ typedef struct {
     unsigned      linger_s;
     unsigned      stats_every_s;
     int           log_level;
+    const char   *seq_file;
+    uint64_t      skip_samples;
 } options_t;
 
 static void usage(void)
@@ -71,7 +79,10 @@ static void usage(void)
         "  --linger S          keep serving backfill S seconds after the\n"
         "                      signal ends (30)\n"
         "  --stats-every S     print stats every S seconds, 0 = off (0)\n"
-        "  --log-level N       0 error .. 3 debug (2)\n",
+        "  --log-level N       0 error .. 3 debug (2)\n"
+        "  --seq-file FILE     persist the sequence counter here and resume\n"
+        "                      from it after a restart\n"
+        "  --skip-samples N    start N samples into the signal file\n",
         stderr);
 }
 
@@ -165,6 +176,12 @@ static int parse_args(int argc, char **argv, options_t *o)
         } else if (strcmp(a, "--log-level") == 0) {
             NEED_VALUE();
             o->log_level = (int)strtol(v, NULL, 10);
+        } else if (strcmp(a, "--seq-file") == 0) {
+            NEED_VALUE();
+            o->seq_file = v;
+        } else if (strcmp(a, "--skip-samples") == 0) {
+            NEED_VALUE();
+            o->skip_samples = strtoull(v, NULL, 10);
         } else {
             usage();
             return -1;
@@ -179,6 +196,36 @@ static int parse_args(int argc, char **argv, options_t *o)
     }
     o->cfg.sample_period_us = 1000000u / o->sample_rate_hz;
     return 0;
+}
+
+/* The persisted counter: a decimal number in a file, replaced atomically so
+ * a crash mid-write leaves the old value, never a torn one. On the MCU this
+ * becomes a flash journal entry; the contract is the same. */
+static uint64_t read_seq_file(const char *path)
+{
+    FILE *f = fopen(path, "r");
+    if (f == NULL)
+        return 0;
+    unsigned long long v = 0;
+    if (fscanf(f, "%llu", &v) != 1)
+        v = 0;
+    fclose(f);
+    return v;
+}
+
+static void write_seq_file(const char *path, uint64_t seq)
+{
+    char tmp[4096];
+    if (snprintf(tmp, sizeof tmp, "%s.tmp", path) >= (int)sizeof tmp)
+        return;
+    FILE *f = fopen(tmp, "w");
+    if (f == NULL)
+        return;
+    fprintf(f, "%llu\n", (unsigned long long)seq);
+    fflush(f);
+    fsync(fileno(f));
+    fclose(f);
+    rename(tmp, path);
 }
 
 static void print_stats(const station_t *st, const char *phase, uint64_t now_ns)
@@ -221,6 +268,16 @@ int main(int argc, char **argv)
         return 1;
     }
 
+    if (o.seq_file != NULL) {
+        const uint64_t saved = read_seq_file(o.seq_file);
+        if (saved > 0) {
+            o.cfg.start_seq = saved + SEQ_RESUME_MARGIN;
+            hal_log(HAL_LOG_INFO, "resuming sequence numbers at %llu (saved %llu + margin %d)",
+                    (unsigned long long)o.cfg.start_seq, (unsigned long long)saved,
+                    SEQ_RESUME_MARGIN);
+        }
+    }
+
     const uint64_t start_mono = hal_time_mono_ns();
     if (station_init(&station, &o.cfg, slot_storage, slot_lengths, o.slots, start_mono) != 0) {
         hal_log(HAL_LOG_ERROR, "bad station configuration");
@@ -235,11 +292,22 @@ int main(int argc, char **argv)
     const uint64_t period_ns  = (uint64_t)o.cfg.sample_period_us * 1000ull;
     const uint64_t wall_start = hal_time_wall_ns();
     uint64_t       sample_idx = 0;
+    uint64_t       saved_seq  = rb_next_seq(&station.rb);
     int            signal_done = 0;
     uint64_t       signal_end_mono = 0;
     uint64_t       last_stats = start_mono;
     int32_t        chunk[256];
     uint8_t        rx[PKT_MAX_LEN];
+
+    for (uint64_t skipped = 0; skipped < o.skip_samples;) {
+        size_t want = (size_t)(o.skip_samples - skipped);
+        if (want > sizeof chunk / sizeof chunk[0])
+            want = sizeof chunk / sizeof chunk[0];
+        const int n = hal_adc_read(chunk, want);
+        if (n <= 0)
+            break;
+        skipped += (uint64_t)n;
+    }
 
     while (!stop_requested) {
         const uint64_t now = hal_time_mono_ns();
@@ -279,6 +347,11 @@ int main(int argc, char **argv)
 
         station_tick(&station, now);
 
+        if (o.seq_file != NULL && rb_next_seq(&station.rb) != saved_seq) {
+            saved_seq = rb_next_seq(&station.rb);
+            write_seq_file(o.seq_file, saved_seq);
+        }
+
         if (o.stats_every_s > 0 && now - last_stats >= (uint64_t)o.stats_every_s * 1000000000ull) {
             print_stats(&station, "running", now);
             last_stats = now;
@@ -288,6 +361,8 @@ int main(int argc, char **argv)
     const uint64_t now = hal_time_mono_ns();
     station_flush(&station, now);
     station_tick(&station, now);
+    if (o.seq_file != NULL)
+        write_seq_file(o.seq_file, rb_next_seq(&station.rb));
     print_stats(&station, stop_requested ? "stopped" : "finished", now);
 
     hal_net_close();

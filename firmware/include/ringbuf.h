@@ -109,4 +109,17 @@ uint64_t rb_next_seq(const rb_t *rb);
 /* Oldest sequence number still retained. Everything below it is gone. */
 uint64_t rb_oldest_seq(const rb_t *rb);
 
+/*
+ * Continue numbering from start_seq instead of 0, on an empty buffer.
+ *
+ * A station that reboots must not reuse sequence numbers the server has
+ * already stored under a different meaning. The application persists
+ * next_seq and, after a reboot, resumes from the saved value plus a margin.
+ * The margin becomes a hole the server records as unrecoverable, which is
+ * the truth: whatever was in RAM at the reboot is gone.
+ *
+ * Returns RB_ERR_ARG if the buffer is not empty.
+ */
+int rb_resume(rb_t *rb, uint64_t start_seq);
+
 #endif /* RINGBUF_H */

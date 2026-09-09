@@ -64,6 +64,8 @@ int station_init(station_t *st, const station_cfg_t *cfg, uint8_t *slots,
 
     if (rb_init(&st->rb, slots, lens, PKT_MAX_LEN, n_slots) != RB_OK)
         return -1;
+    if (cfg->start_seq > 0 && rb_resume(&st->rb, cfg->start_seq) != RB_OK)
+        return -1;
     rl_init(&st->rl, cfg->rate_limit_bps, cfg->rate_burst_bytes, now_ns);
 
     st->start_ns          = now_ns;
