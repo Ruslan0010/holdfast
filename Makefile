@@ -35,7 +35,7 @@ ASAN_BINS := $(patsubst tests/%.c,$(BUILD)/asan/%,$(UNIT_SRC))
 # Host port of the station: the POSIX HAL plus a command-line front end.
 STATION_SRC := $(wildcard firmware/hal/posix/*.c) $(wildcard firmware/app/*.c)
 
-.PHONY: all test test-asan station fuzz fuzz-corpus pytest integration \
+.PHONY: all test test-asan station vectors fuzz fuzz-corpus pytest integration \
         check lint format clean help
 
 all: test station
@@ -72,8 +72,8 @@ FUZZ_SRC  := $(wildcard tests/fuzz/fuzz_*.c)
 FUZZ_BINS := $(patsubst tests/fuzz/%.c,$(BUILD)/fuzz/%,$(FUZZ_SRC))
 FUZZ_TIME ?= 30
 
-$(BUILD)/fuzz/%: tests/fuzz/%.c $(CORE_SRC) | $(BUILD)/fuzz
-	clang $(CFLAGS) -fsanitize=fuzzer,address,undefined $(CORE_SRC) $< -o $@
+$(BUILD)/fuzz/%: tests/fuzz/%.c $(CORE_SRC) $(MOCK_HAL) | $(BUILD)/fuzz
+	clang $(CFLAGS) -fsanitize=fuzzer,address,undefined $(CORE_SRC) $(MOCK_HAL) $< -o $@
 
 fuzz: $(FUZZ_BINS)
 	@for f in $(FUZZ_BINS); do \
@@ -83,8 +83,8 @@ fuzz: $(FUZZ_BINS)
 
 # Replay the seed corpus through the same harnesses with a plain driver, so
 # the corpus is exercised even where clang is not installed.
-$(BUILD)/fuzz/corpus_%: tests/fuzz/fuzz_%.c tests/fuzz/driver.c $(CORE_SRC) | $(BUILD)/fuzz
-	$(CC) $(CFLAGS) $(CORE_SRC) tests/fuzz/driver.c $< -o $@
+$(BUILD)/fuzz/corpus_%: tests/fuzz/fuzz_%.c tests/fuzz/driver.c $(CORE_SRC) $(MOCK_HAL) | $(BUILD)/fuzz
+	$(CC) $(CFLAGS) $(SANFLAGS) $(CORE_SRC) $(MOCK_HAL) tests/fuzz/driver.c $< -o $@
 
 fuzz-corpus: $(patsubst tests/fuzz/fuzz_%.c,$(BUILD)/fuzz/corpus_%,$(FUZZ_SRC))
 	@for f in $^; do \
@@ -92,7 +92,14 @@ fuzz-corpus: $(patsubst tests/fuzz/fuzz_%.c,$(BUILD)/fuzz/corpus_%,$(FUZZ_SRC))
 	    $$f tests/fuzz/corpus/$$name || exit 1; \
 	done
 
-pytest:
+# Cross-implementation vectors: C encoders emit hex, Python decodes it.
+vectors: $(BUILD)/vectors.txt
+
+$(BUILD)/vectors.txt: tests/vectors/gen_vectors.c $(CORE_SRC) $(MOCK_HAL) | $(BUILD)
+	$(CC) $(CFLAGS) $(CORE_SRC) $(MOCK_HAL) $< -o $(BUILD)/gen_vectors
+	$(BUILD)/gen_vectors > $@
+
+pytest: vectors
 	PYTHONPATH=server:tools python3 -m unittest discover -s tests/python -p 'test_*.py' -v
 
 integration: station
